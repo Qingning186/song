@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D螺旋粒子圣诞树 - 浅天空胧蓝</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { width: 100%; height: 100%; background: #000; overflow: hidden; }
+        canvas { display: block; }
+        .ui {
+            position: absolute; top: 50%; left: 3%; transform: translateY(-50%);
+            color: rgba(180, 220, 255, 0.8); font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 14px; letter-spacing: 2px; text-shadow: 0 0 12px rgba(100, 180, 255, 0.5);
+            pointer-events: none; z-index: 10; line-height: 1.8;
+        }
+        .ui .sub { font-size: 11px; opacity: 0.5; letter-spacing: 1px; }
+        .hint {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: rgba(180, 220, 255, 0.35); font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-size: 12px; letter-spacing: 1px; pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="ui">song<br><span class="sub">647</span></div>
+    <div class="hint">拖动旋转 · 滚轮缩放 · 自动旋转中</div>
+    <script type="importmap">
+    { "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }}
+    </script>
+    <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 50, 360);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 1.2;
+    controls.minDistance = 120;
+    controls.maxDistance = 800;
+
+    const C_BLUE  = new THREE.Color(0x6CC4FF);
+    const C_LIGHT = new THREE.Color(0xBEE5FF);
+    const C_DEEP  = new THREE.Color(0x4A9EE0);
+    const C_WHITE = new THREE.Color(0xFFFFFF);
+
+    const treeGroup = new THREE.Group();
+    scene.add(treeGroup);
+
+    const treeHeight = 280;
+    const baseRadius = 130;
+    const topY = treeHeight / 2;
+    const bottomY = -treeHeight / 2;
+
+    // ========== 主螺旋线（底部粒子极多很粗，顶部很少很细） ==========
+    // 关键：粒子数量按高度分配，底部多顶部少
+    const spiralTurns = 7;
+    const spiralTotal = 14000;
+
+    const spPositions = [];
+    const spColors = [];
+
+    for (let i = 0; i < spiralTotal; i++) {
+        // 用加权随机让粒子集中在底部：t偏小=底部
+        const t = Math.pow(Math.random(), 2.2);   // 偏向0（底部），底部粒子远多于顶部
+
+        const y = bottomY + t * treeHeight;
+        const radius = baseRadius * Math.pow(1 - t, 1.3);
+        const angle = t * Math.PI * 2 * spiralTurns;
+
+        // 偏移量：底部很大，顶部很小
+        // 底部偏移30（很粗），顶部偏移1（很细）
+        const spread = 30 * Math.pow(1 - t, 2.5) + 1;
+        // 底部在螺旋周围环形分布，不只是线上
+        const x = Math.cos(angle) * radius + (Math.random() - 0.5) * spread;
+        const z = Math.sin(angle) * radius + (Math.random() - 0.5) * spread;
+        const py = y + (Math.random() - 0.5) * spread * 0.4;
+
+        spPositions.push(x, py, z);
+
+        let c;
+        const cr = Math.random();
+        if (t > 0.85) c = cr < 0.5 ? C_LIGHT : C_WHITE;
+        else if (cr < 0.4) c = C_BLUE;
+        else if (cr < 0.7) c = C_LIGHT;
+        else c = C_DEEP;
+        spColors.push(c.r, c.g, c.b);
+    }
+
+    const spGeo = new THREE.BufferGeometry();
+    spGeo.setAttribute('position', new THREE.Float32BufferAttribute(spPositions, 3));
+    spGeo.setAttribute('color', new THREE.Float32BufferAttribute(spColors, 3));
+    const spMat = new THREE.PointsMaterial({
+        size: 2.8, vertexColors: true, transparent: true, opacity: 0.8,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    treeGroup.add(new THREE.Points(spGeo, spMat));
+
+    // 第二条反向螺旋（也底部多顶部少）
+    const sp2Positions = [];
+    const sp2Colors = [];
+    const sp2Total = 8000;
+    for (let i = 0; i < sp2Total; i++) {
+        const t = Math.pow(Math.random(), 2.2);
+        const y = bottomY + t * treeHeight;
+        const radius = baseRadius * Math.pow(1 - t, 1.3);
+        const angle = -t * Math.PI * 2 * spiralTurns + Math.PI;
+        const spread = 22 * Math.pow(1 - t, 2.5) + 0.8;
+        const x = Math.cos(angle) * radius + (Math.random() - 0.5) * spread;
+        const z = Math.sin(angle) * radius + (Math.random() - 0.5) * spread;
+        const py = y + (Math.random() - 0.5) * spread * 0.4;
+        sp2Positions.push(x, py, z);
+        const c = Math.random() > 0.5 ? C_LIGHT : C_BLUE;
+        sp2Colors.push(c.r, c.g, c.b);
+    }
+    const sp2Geo = new THREE.BufferGeometry();
+    sp2Geo.setAttribute('position', new THREE.Float32BufferAttribute(sp2Positions, 3));
+    sp2Geo.setAttribute('color', new THREE.Float32BufferAttribute(sp2Colors, 3));
+    const sp2Mat = new THREE.PointsMaterial({
+        size: 2, vertexColors: true, transparent: true, opacity: 0.5,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    treeGroup.add(new THREE.Points(sp2Geo, sp2Mat));
+
+    // ========== 树周围弥散粒子（大量密集） ==========
+    const leafCount = 9000;
+    const leafData = [];
+    const leafPos = new Float32Array(leafCount * 3);
+    const leafCol = new Float32Array(leafCount * 3);
+
+    for (let i = 0; i < leafCount; i++) {
+        // 完全随机的高度分布，不按螺旋规律
+        const t = Math.random();
+        const y = bottomY + t * treeHeight;
+        const baseR = baseRadius * Math.pow(1 - t, 1.3);
+        // 随机距离：有的近有的远，完全不规则
+        const distRand = Math.random();
+        const extraR = baseR + distRand * 70 * (1 - t * 0.2);
+        // 随机角度
+        const angle = Math.random() * Math.PI * 2;
+        // 随机高度偏移，不整齐
+        const yOffset = (Math.random() - 0.5) * 40;
+
+        const d = {
+            bx: Math.cos(angle) * extraR + (Math.random() - 0.5) * 15,
+            by: y + yOffset,
+            bz: Math.sin(angle) * extraR + (Math.random() - 0.5) * 15,
+            ph: Math.random() * Math.PI * 2,
+            ps: Math.random() * 0.03 + 0.008,
+            fa: Math.random() * 6 + 2,
+            c: Math.random() > 0.5 ? C_LIGHT : (Math.random() > 0.5 ? C_BLUE : C_WHITE)
+        };
+        leafData.push(d);
+        leafPos[i*3]=d.bx; leafPos[i*3+1]=d.by; leafPos[i*3+2]=d.bz;
+        leafCol[i*3]=d.c.r; leafCol[i*3+1]=d.c.g; leafCol[i*3+2]=d.c.b;
+    }
+    const leafGeo = new THREE.BufferGeometry();
+    leafGeo.setAttribute('position', new THREE.BufferAttribute(leafPos, 3));
+    leafGeo.setAttribute('color', new THREE.BufferAttribute(leafCol, 3));
+    const leafMat = new THREE.PointsMaterial({
+        size: 1.4, vertexColors: true, transparent: true, opacity: 0.5,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    treeGroup.add(new THREE.Points(leafGeo, leafMat));
+
+    // ========== 地面粒子 ==========
+    const groundCount = 4000;
+    const groundData = [];
+    const groundPos = new Float32Array(groundCount * 3);
+    const groundCol = new Float32Array(groundCount * 3);
+    for (let i = 0; i < groundCount; i++) {
+        const r = Math.pow(Math.random(), 0.6) * 280;
+        const angle = Math.random() * Math.PI * 2;
+        const x = Math.cos(angle) * r;
+        const z = Math.sin(angle) * r;
+        const y = bottomY - Math.random() * 30;
+        const d = {
+            bx:x, by:y, bz:z,
+            ph: Math.random()*Math.PI*2, ps: Math.random()*0.02+0.005, fa: Math.random()*3+1,
+            c: Math.random()>0.6 ? C_LIGHT : (Math.random()>0.5 ? C_BLUE : C_WHITE)
+        };
+        groundData.push(d);
+        groundPos[i*3]=x; groundPos[i*3+1]=y; groundPos[i*3+2]=z;
+        groundCol[i*3]=d.c.r; groundCol[i*3+1]=d.c.g; groundCol[i*3+2]=d.c.b;
+    }
+    const groundGeo = new THREE.BufferGeometry();
+    groundGeo.setAttribute('position', new THREE.BufferAttribute(groundPos, 3));
+    groundGeo.setAttribute('color', new THREE.BufferAttribute(groundCol, 3));
+    const groundMat = new THREE.PointsMaterial({
+        size: 1.2, vertexColors: true, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    treeGroup.add(new THREE.Points(groundGeo, groundMat));
+
+    // ========== 3D胖鼓爱心（小，中间明显鼓起，心尖朝下，静止） ==========
+    // 使用3D心形隐式方程的体采样，中间厚两边薄，明显鼓起
+    const heartCount = 3500;
+    const heartPos = [];
+    const heartCol = [];
+    const heartCenterY = topY + 16;
+    const heartScale = 0.7;
+    const heartThickness = 22; // Z方向大幅加厚，让中间非常鼓
+
+    function inHeart3D(x, y, z) {
+        // 3D心形隐式方程（正常方向，心尖朝下）
+        const x2 = x*x;
+        const y2 = y*y;
+        const z2 = z*z;
+        const a = x2 + (9/4)*z2 + y2 - 1;
+        return a*a*a - x2*y*y*y - (9/80)*z2*y*y*y <= 0;
+    }
+
+    // 在3D心形体积内拒绝采样
+    let placed = 0;
+    let attempts = 0;
+    while (placed < heartCount && attempts < heartCount * 30) {
+        attempts++;
+        const sx = (Math.random() * 2 - 1) * 1.3;
+        const sy = (Math.random() * 2 - 1) * 1.2;
+        const sz = (Math.random() * 2 - 1) * 0.9;
+        if (inHeart3D(sx, sy, sz)) {
+            const px = sx * 22 * heartScale;
+            const py = sy * 22 * heartScale;
+            // Z方向用更大的厚度，中间鼓起明显
+            const pz = sz * heartThickness * heartScale;
+            heartPos.push(px, heartCenterY + py, pz);
+
+            // 爱心颜色偏深蓝，蓝色更多
+            let c;
+            if (sy < -0.4) c = Math.random() > 0.5 ? C_BLUE : C_DEEP;   // 尖端深蓝
+            else if (Math.abs(sz) > 0.5) c = Math.random() > 0.3 ? C_DEEP : C_BLUE;  // 侧面深蓝
+            else c = Math.random() > 0.6 ? C_BLUE : C_DEEP;  // 正面中心也是蓝/深蓝
+            heartCol.push(c.r, c.g, c.b);
+            placed++;
+        }
+    }
+
+    const heartGeo = new THREE.BufferGeometry();
+    heartGeo.setAttribute('position', new THREE.Float32BufferAttribute(heartPos, 3));
+    heartGeo.setAttribute('color', new THREE.Float32BufferAttribute(heartCol, 3));
+    const heartMat = new THREE.PointsMaterial({
+        size: 1.8, vertexColors: true, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    const heartMesh = new THREE.Points(heartGeo, heartMat);
+    // 爱心不随树旋转，保持静止
+    scene.add(heartMesh);
+
+    // ========== 背景星尘（双层） ==========
+    const starCount = 4000;
+    const starPos = [], starCol = [];
+    for (let i = 0; i < starCount; i++) {
+        const r = 200 + Math.random() * 800;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        starPos.push(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+        const bright = Math.random() > 0.6;
+        const c = bright ? C_WHITE : (Math.random()>0.5 ? C_LIGHT : C_DEEP);
+        const dim = Math.random()*0.5+0.15;
+        starCol.push(c.r*dim, c.g*dim, c.b*dim);
+    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+    starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starCol, 3));
+    const starMat = new THREE.PointsMaterial({
+        size: 1.3, vertexColors: true, transparent: true, opacity: 0.6,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    const stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    const nearStarCount = 1500;
+    const nsPos = [], nsCol = [];
+    for (let i = 0; i < nearStarCount; i++) {
+        const r = 180 + Math.random() * 300;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        nsPos.push(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+        const c = Math.random()>0.5 ? C_WHITE : C_LIGHT;
+        const dim = Math.random()*0.4+0.2;
+        nsCol.push(c.r*dim, c.g*dim, c.b*dim);
+    }
+    const nsGeo = new THREE.BufferGeometry();
+    nsGeo.setAttribute('position', new THREE.Float32BufferAttribute(nsPos, 3));
+    nsGeo.setAttribute('color', new THREE.Float32BufferAttribute(nsCol, 3));
+    const nsMat = new THREE.PointsMaterial({
+        size: 0.9, vertexColors: true, transparent: true, opacity: 0.45,
+        blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+    });
+    const nearStars = new THREE.Points(nsGeo, nsMat);
+    scene.add(nearStars);
+
+    // ========== 动画 ==========
+    const clock = new THREE.Clock();
+    function animate() {
+        const elapsed = clock.getElapsedTime();
+        treeGroup.rotation.y += 0.002;
+
+        // 树叶飘浮
+        const lP = leafGeo.attributes.position.array;
+        for (let i = 0; i < leafCount; i++) {
+            const d = leafData[i];
+            d.ph += d.ps;
+            lP[i*3]   = d.bx + Math.sin(d.ph)*d.fa;
+            lP[i*3+1] = d.by + Math.cos(d.ph*0.7)*d.fa*0.6 + Math.sin(elapsed*0.5+d.ph)*3;
+            lP[i*3+2] = d.bz + Math.sin(d.ph*0.9)*d.fa;
+        }
+        leafGeo.attributes.position.needsUpdate = true;
+
+        const gP = groundGeo.attributes.position.array;
+        for (let i = 0; i < groundCount; i++) {
+            const d = groundData[i];
+            d.ph += d.ps;
+            gP[i*3]   = d.bx + Math.sin(d.ph)*d.fa;
+            gP[i*3+1] = d.by + Math.cos(d.ph)*d.fa*0.5;
+            gP[i*3+2] = d.bz + Math.sin(d.ph*0.8)*d.fa;
+        }
+        groundGeo.attributes.position.needsUpdate = true;
+
+        stars.rotation.y += 0.0002;
+        nearStars.rotation.y += 0.0004;
+        controls.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    </script>
+</body>
+</html>
